@@ -61,8 +61,10 @@ end   = 360
 The geoid offset (undulation N) converts your GPS altitude (WGS-84 ellipsoidal) to metres above mean sea level. Three ways to get it:
 
 1. **GPS device or app** — many receivers show it directly as *geoid height* or *geoid separation* in their status or satellite screen.
-2. **GeoidEval (online)** — search for *GeographicLib GeoidEval*, enter your latitude and longitude, and read off N in metres (EGM2008 model, accurate to ~1 m worldwide).
-3. **National geodesy authority** — e.g. BKG for Germany, NGS for the USA; they publish high-resolution national geoid models.
+2. **[GeoidEval](https://geographiclib.sourceforge.io/cgi-bin/GeoidEval)** — enter your latitude and longitude, read off N in metres (EGM2008 model, accurate to ~1 m worldwide).
+3. **National geodesy authority** — higher-accuracy national models:
+   - Germany: [BKG GCG2016](https://gibs.bkg.bund.de/geoid/gscomp.php?p=g)
+   - USA: [NGS GEOID18](https://geodesy.noaa.gov/GEOID/GEOID18/computation.html)
 
 ## Data sources
 
