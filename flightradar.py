@@ -22,6 +22,8 @@ No external Python dependencies (stdlib only).
 import json
 import os
 import sys
+import threading
+import time
 import tomllib
 import urllib.request
 import urllib.error
@@ -113,19 +115,26 @@ SOURCES = [
 ]
 
 
+_aircraft_cache: dict | None = None   # last successful response
+
 def get_aircraft():
-    """Try each source in order; move to the next on error."""
+    """Try each source in order; move to the next on error.
+    On total failure, return the last known positions (stale=True) so the
+    map is not wiped by a transient 403 or network blip."""
+    global _aircraft_cache
     last_err = None
     for name, fn in SOURCES:
         try:
             planes = fn(CENTER_LAT, CENTER_LON, RADIUS_NM)
-            # keep only aircraft with a valid position
             planes = [p for p in planes if p["lat"] is not None and p["lon"] is not None]
-            return {"source": name, "aircraft": planes}
+            _aircraft_cache = {"source": name, "aircraft": planes}
+            return _aircraft_cache
         except (urllib.error.URLError, urllib.error.HTTPError, ValueError, TimeoutError) as e:
             last_err = f"{name}: {e}"
             continue
-    return {"source": None, "aircraft": [], "error": last_err or "no source reachable"}
+    if _aircraft_cache is not None:
+        return {**_aircraft_cache, "stale": True, "error": last_err}
+    return {"source": None, "aircraft": [], "stale": True, "error": last_err or "no source reachable"}
 
 # ---------------------------------------------------------------------------
 # HTTP server: serves the map and a JSON endpoint
@@ -136,6 +145,13 @@ class Handler(BaseHTTPRequestHandler):
         pass  # keep console quiet
 
     def do_GET(self):
+        try:
+            self._do_get()
+        except BrokenPipeError:
+            # Client closed the connection — harmless (e.g. page reload, navigate away).
+            pass
+
+    def _do_get(self):
         if self.path == "/" or self.path.startswith("/index"):
             body = (INDEX_HTML
                 .replace("__LOCATION_NAME__", LOCATION_NAME)
@@ -312,7 +328,7 @@ INDEX_HTML = """<!DOCTYPE html>
     return [lat + dlat, lon + dlon];
   }
 
-  function popup(p) {
+  function popup(p, az, el) {
     let alt = 'on ground';
     if (p.alt_ft == null)          alt = '–';
     else if (p.alt_ft !== 0)       alt = p.alt_ft.toLocaleString('en-US') + ' ft / '
@@ -320,11 +336,19 @@ INDEX_HTML = """<!DOCTYPE html>
     const spd = p.gs_kt != null
       ? Math.round(p.gs_kt) + ' kt / ' + Math.round(p.gs_kt * 1.852) + ' km/h'
       : '–';
+    const azStr = az != null ? Math.round(az) + '°' : '–';
+    const elStr = el != null ? (el >= 0 ? '+' : '') + el.toFixed(1) + '°' : '–';
+    const regLink = p.reg
+      ? `<a href="https://globe.adsbexchange.com/?icao=${p.hex}" target="_blank" rel="noopener">${p.reg}</a>`
+      : p.hex
+        ? `<a href="https://globe.adsbexchange.com/?icao=${p.hex}" target="_blank" rel="noopener">${p.hex}</a>`
+        : '–';
     return `<b>${p.callsign || p.hex}</b><br>`
-         + `Reg: ${p.reg || '–'} · Type: ${p.type || '–'}<br>`
+         + `Reg: ${regLink} · Type: ${p.type || '–'}<br>`
          + `Alt: ${alt}<br>`
          + `Speed: ${spd}<br>`
-         + `Heading: ${p.track != null ? Math.round(p.track) + '°' : '–'}`;
+         + `Heading: ${p.track != null ? Math.round(p.track) + '°' : '–'}<br>`
+         + `Az: <code>${azStr}</code> · El: <code>${elStr}</code>`;
   }
 
   async function tick() {
@@ -340,10 +364,13 @@ INDEX_HTML = """<!DOCTYPE html>
         const az     = azimuth(p.lat, p.lon);
         const inFov  = inAnySector(az);
         const label  = inFov ? azLabel(p, az, color) : null;
+        const el     = p.alt_ft != null
+          ? Math.atan2(p.alt_ft * 0.3048 - OBSERVER_ALT_MSL_M, distanceM(p.lat, p.lon)) * 180 / Math.PI
+          : null;
         let entry = markers.get(p.hex);
         if (entry) {
           entry.dot.setLatLng([p.lat, p.lon]).setStyle({ color, fillColor: color });
-          entry.dot.getPopup() && entry.dot.setPopupContent(popup(p));
+          entry.dot.getPopup() && entry.dot.setPopupContent(popup(p, az, el));
           if (inFov) {
             if (entry.dot.getTooltip()) entry.dot.setTooltipContent(label);
             else entry.dot.bindTooltip(label, { permanent: true, direction: 'bottom', className: 'az-label', offset: [0, 4] });
@@ -359,7 +386,7 @@ INDEX_HTML = """<!DOCTYPE html>
         } else {
           const dot = L.circleMarker([p.lat, p.lon], {
             radius: 5, color, fillColor: color, fillOpacity: 1, weight: 1.5
-          }).addTo(map).bindPopup(popup(p));
+          }).addTo(map).bindPopup(popup(p, az, el));
           if (inFov) dot.bindTooltip(label, { permanent: true, direction: 'bottom', className: 'az-label', offset: [0, 4] });
           const line = end ? L.polyline([[p.lat, p.lon], end], { color, weight: 1.5, opacity: 0.8 }).addTo(map) : null;
           markers.set(p.hex, { dot, line });
@@ -371,10 +398,13 @@ INDEX_HTML = """<!DOCTYPE html>
       }
 
       document.getElementById('count').textContent = data.aircraft.length;
-      document.getElementById('src').textContent = data.source || '–';
-      document.getElementById('status').innerHTML =
-        data.error ? `<span class="err">Error: ${data.error}</span>`
-                   : 'updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZoneName: 'short' });
+      document.getElementById('src').textContent = data.source
+        ? data.stale ? data.source + ' (stale)' : data.source
+        : '–';
+      const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZoneName: 'short' });
+      document.getElementById('status').innerHTML = data.stale
+        ? `<span style="color:#b06000">⚠ API error — showing last known positions</span>`
+        : 'updated ' + ts;
     } catch (e) {
       document.getElementById('status').innerHTML =
         `<span class="err">local server unreachable</span>`;

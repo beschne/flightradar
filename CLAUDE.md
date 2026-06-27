@@ -65,6 +65,10 @@ Loaded at startup via `tomllib`; a missing file exits with a clear error.
   - **Az/el label**: aircraft inside a FOV sector show a permanent label beneath their dot:
     `az 245°  ↑+3.2°` (azimuth and elevation angle above the horizon). Elevation requires
     `observer_alt_m` and `geoid_offset_m` in `config.toml`; omitting them defaults to 0 m MSL.
+- **Popup** (click marker): shows callsign, registration (clickable link), type, altitude, speed,
+  heading, azimuth, elevation. Registration and ICAO links both point to
+  `https://globe.adsbexchange.com/?icao=HEX` — opens the interactive globe centred on that aircraft;
+  plain text `–` if neither registration nor hex exists.
 - **Zoom**: scroll-wheel and double-click zoom disabled; keyboard and ±-buttons enabled
 - **Initial view**: computed from viewport height so the 40 km ring fills the screen regardless of aspect ratio; 50 km ring is clipped. Formula: `zoom = floor(log2(40075 * cos(lat) * mapHeight / 2 / 256 / desiredKm))` where `desiredKm = RADIUS_KM * 0.88`
 - **HUD**: bottom-left, shows aircraft count, data source, last update time (24 h + timezone), altitude colour scale
