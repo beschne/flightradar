@@ -56,6 +56,14 @@ end   = 360
 | `geoid_offset_m` | Geoid undulation N; MSL height = `observer_alt_m − geoid_offset_m` (optional) |
 | `[[sectors]]` | Field-of-view sectors: `start`/`end` compass bearings in degrees. Sectors crossing north (e.g. 310 → 30) work automatically. |
 
+### Finding your geoid offset
+
+The geoid offset (undulation N) converts your GPS altitude (WGS-84 ellipsoidal) to metres above mean sea level. Three ways to get it:
+
+1. **GPS device or app** — many receivers show it directly as *geoid height* or *geoid separation* in their status or satellite screen.
+2. **GeoidEval (online)** — search for *GeographicLib GeoidEval*, enter your latitude and longitude, and read off N in metres (EGM2008 model, accurate to ~1 m worldwide).
+3. **National geodesy authority** — e.g. BKG for Germany, NGS for the USA; they publish high-resolution national geoid models.
+
 ## Data sources
 
 Aircraft data comes from free, keyless ADS-B APIs with automatic fallback:
