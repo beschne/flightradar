@@ -1,0 +1,15 @@
+[radar]
+center_lat    = 48.8566
+center_lon    = 2.3522
+radius_km     = 50
+port          = 8742
+location_name = "My Location"
+
+# One [[sectors]] block per field-of-view sector you want drawn on the map.
+# start/end are compass bearings in degrees (0 = north, clockwise).
+# Sectors that cross north (e.g. 310 → 30) are handled automatically.
+# Remove all [[sectors]] blocks if you don't want any sectors drawn.
+
+[[sectors]]
+start = 0
+end   = 90

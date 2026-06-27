@@ -1,0 +1,2 @@
+# No third-party dependencies — stdlib only.
+# Python >= 3.11 required (ThreadingHTTPServer, match-statement).
