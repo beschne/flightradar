@@ -7,9 +7,7 @@ Leaflet.js map to the browser. Bypasses CORS and Cloudflare browser challenges
 by doing all external fetches server-side.
 
 ## Git / commits
-Only the repository owner commits. Claude must never commit or push — not even
-with `--no-verify`. Draft commit messages if asked, but leave the actual
-commit to the owner.
+Claude may commit and push. No co-author lines in commit messages.
 
 ## Stack
 - Python 3.11+ stdlib only — no third-party packages, no pip installs. (`tomllib` is built-in since 3.11.)
@@ -30,8 +28,8 @@ Browser (Leaflet) -> localhost:8742 (Python ThreadingHTTPServer) -> ADS-B APIs
 `GET /api/aircraft` returns JSON with aircraft positions from the first working source.
 
 The HTML template uses `__CENTER_LAT__`, `__CENTER_LON__`, `__RADIUS_KM__`, `__LOCATION_NAME__`,
-and `__SECTORS_JSON__` placeholders substituted at request time in `do_GET`. Config changes
-take effect on the next page load after a server restart.
+`__SECTORS_JSON__`, and `__OBSERVER_ALT_MSL_M__` placeholders substituted at request time in
+`do_GET`. Config changes take effect on the next page load after a server restart.
 
 ## Source fallback chain
 1. **adsb.lol** (ODbL, keyless, ADSBExchange v2 format)
@@ -51,6 +49,8 @@ Loaded at startup via `tomllib`; a missing file exits with a clear error.
 | `port` | localhost port |
 | `location_name` | Shown in the browser tab and HUD |
 | `[[sectors]]` | Array of `{start, end}` compass bearings; serialised to `__SECTORS_JSON__` |
+| `observer_alt_m` | GPS / WGS-84 ellipsoidal height of the observer in metres (optional) |
+| `geoid_offset_m` | Geoid undulation N; MSL height = `observer_alt_m − geoid_offset_m` (optional) |
 
 ## Map features
 - **Tile layer**: CARTO Voyager (colorful, detailed OSM-style)
@@ -62,6 +62,9 @@ Loaded at startup via `tomllib`; a missing file exits with a clear error.
 - **Aircraft markers**: `L.circleMarker` (radius 5) + `L.polyline` track line
   - Color: red (low altitude) → green (high altitude), mapped over 0–40,000 ft / 0–12 km / 0–6.6 NM
   - Track line length proportional to ground speed (`gs_kt * RADIUS_KM / 2500` km)
+  - **Az/el label**: aircraft inside a FOV sector show a permanent label beneath their dot:
+    `az 245°  ↑+3.2°` (azimuth and elevation angle above the horizon). Elevation requires
+    `observer_alt_m` and `geoid_offset_m` in `config.toml`; omitting them defaults to 0 m MSL.
 - **Zoom**: scroll-wheel and double-click zoom disabled; keyboard and ±-buttons enabled
 - **Initial view**: computed from viewport height so the 40 km ring fills the screen regardless of aspect ratio; 50 km ring is clipped. Formula: `zoom = floor(log2(40075 * cos(lat) * mapHeight / 2 / 256 / desiredKm))` where `desiredKm = RADIUS_KM * 0.88`
 - **HUD**: bottom-left, shows aircraft count, data source, last update time (24 h + timezone), altitude colour scale
@@ -95,3 +98,7 @@ the list to JSON and injects it as `__SECTORS_JSON__`; the JS iterates it with
 and converting each bearing + `FOV_RANGE_KM` to a lat/lon offset. Sectors that
 cross 0°/360° north are handled by looping to `endDeg + 360` and using
 `b % 360` for the bearing.
+
+`inAnySector(az)` uses the same wrap logic to test whether a bearing falls inside
+any configured sector. Aircraft that pass this test receive a permanent Leaflet
+tooltip (`.az-label`, no background) below their dot showing azimuth and elevation.

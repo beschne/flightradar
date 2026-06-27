@@ -3,7 +3,10 @@ center_lat    = 48.8566
 center_lon    = 2.3522
 radius_km     = 50
 port          = 8742
-location_name = "My Location"
+location_name  = "My Location"
+# Optional: used to compute elevation angles for in-sector aircraft.
+# observer_alt_m = 0.0   # GPS / WGS-84 ellipsoidal height in metres
+# geoid_offset_m = 0.0   # geoid undulation; MSL = observer_alt_m − geoid_offset_m
 
 # One [[sectors]] block per field-of-view sector you want drawn on the map.
 # start/end are compass bearings in degrees (0 = north, clockwise).
